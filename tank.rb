@@ -357,38 +357,32 @@ class Game
     nil
   end
 
-  def head_towards_something(path)
-    return nil if path_length(path) * @config['health_loss'] > @state['health']
-    direction = Utils.infer_orientation(path[0], path[1], 1)
-    if @me.orientation == direction
-      'move'
-    elsif Utils.rotate_right(@me.orientation) == direction
-      'right'
-    elsif Utils.rotate_left(@me.orientation) == direction
-      'left'
-    else
-      'right'
-    end
+  def head_towards_something(directions)
+    return nil if directions.length * @config['health_loss'] > @state['health']
+    directions.first
   end
 
-  def path_length(path)
-    length = 0
+  def convert_path_to_directions(path)
+    directions = []
     i = 0
     orientation = @me.orientation
     while (i < path.length - 1)
       direction = Utils.infer_orientation(path[i], path[i + 1], 1)
-      length += 1
       if orientation == direction
         i += 1
+        directions << 'move'
       elsif Utils.rotate_right(orientation) == direction
         orientation = Utils.rotate_right(orientation)
+        directions << 'right'
       elsif Utils.rotate_left(orientation) == direction
         orientation = Utils.rotate_left(orientation)
+        directions << 'left'
       else
         orientation = Utils.rotate_right(orientation)
+        directions << 'right'
       end
     end
-    length
+    directions
   end
 
   def seek_out_battery
@@ -401,11 +395,11 @@ class Game
     end
 
     preferred_batteries = @batteries.map do |b|
-      @a_star.find_path(@me.vector, b)
+      convert_path_to_directions(@a_star.find_path(@me.vector, b))
     end.sort_by(&:length)
 
-    if preferred_batteries.length > 1 &&
-        @a_star.find_path(@opponent.vector, preferred_batteries.first.last).length < preferred_batteries.first.length
+    # don't go for a battery the opponent is closer to
+    if convert_path_to_directions(@a_star.find_path(@opponent.vector, preferred_batteries.first.last)).length < preferred_batteries.first.length
       preferred_batteries.shift
     end
     return nil unless preferred_batteries.first
