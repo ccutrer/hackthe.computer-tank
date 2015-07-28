@@ -4,6 +4,7 @@ require 'net/http'
 require 'json'
 require 'byebug'
 require 'uri'
+require_relative('a_star')
 
 module Utils
   class << self
@@ -158,6 +159,22 @@ class Game
     @opponent = Tank.new
     @me = Tank.new
     @moves = 0
+    adjacency = ->(location) do
+      [
+          [Utils.wrap_x(location.first - 1), location.last],
+          [location.first, Utils.wrap_y(location.last - 1)],
+          [Utils.wrap_x(location.first + 1), location.last],
+          [location.first, Utils.wrap_y(location.last + 1)]
+      ].select do |new_location|
+        spot(new_location) != 'W'
+      end
+    end
+
+    cost_func = ->(a, b) { 1 }
+    distance_func = ->(location, finish) do
+      (finish.last - location.last).abs + (finish.first - location.first).abs
+    end
+    @a_star = AStar.new(adjacency, cost_func, distance_func)
     join(me)
   end
 
@@ -230,58 +247,81 @@ class Game
     @board[pos.last][pos.first]
   end
 
-  def move
+  def avoid_laser
     action = nil
     @lasers.each do |l|
-       perpendicular = Utils.perpendicular?(@me.orientation, l.orientation)
-       if perpendicular
-         best_direction = 'move'
-         count = 1
-         if spot(@me.project_move) == 'W'
-           best_direction = 'right'
-           count += 1
-           if spot(@me.project_move('right') == 'W')
-             best_direction = 'left'
-             # I'm in a corner; gotta reverse out
-             if spot(@me.project_move('left') == 'W')
-               count += 1
-             end
-           end
-         end
-       else
-         best_direction = 'right'
-         count = 2
-         if spot(@me.project_move('right')) == 'W'
-           best_direction = 'left'
-           if spot(@me.project_move('left')) == 'W'
-             count += 1
-             best_direction = 'move'
-             if spot(@me.project_move) == 'W'
-               count += 2
-               best_direction = 'right'
-             end
-           end
-         end
-       end
+      perpendicular = Utils.perpendicular?(@me.orientation, l.orientation)
+      if perpendicular
+        best_direction = 'move'
+        count = 1
+        if spot(@me.project_move) == 'W'
+          best_direction = 'right'
+          count += 1
+          if spot(@me.project_move('right')) == 'W'
+            best_direction = 'left'
+            # I'm in a corner; gotta reverse out
+            if spot(@me.project_move('left')) == 'W'
+              count += 1
+            end
+          end
+        end
+      else
+        best_direction = 'right'
+        count = 2
+        if spot(@me.project_move('right')) == 'W'
+          best_direction = 'left'
+          if spot(@me.project_move('left')) == 'W'
+            count += 1
+            best_direction = 'move'
+            if spot(@me.project_move) == 'W'
+              count += 2
+              best_direction = 'right'
+            end
+          end
+        end
+      end
 
-       moves = l.project_moves(count)
-       moves.each do |pos|
-         # it will hit a wall, don't worry about it
-         break if spot(pos) == 'W'
-         if pos == @me.position
-           if perpendicular
-             action = 'move'
-           else
-             action = best_direction
-           end
-           break
-         end
-       end
+      moves = l.project_moves(count)
+      moves.each do |pos|
+        # it will hit a wall, don't worry about it
+        break if spot(pos) == 'W'
+        if pos == @me.position
+          if perpendicular
+            action = 'move'
+          else
+            action = best_direction
+          end
+          break
+        end
+      end
     end
 
-    if @moves == 1
-      action = 'fire'
+    action
+  end
+
+  def seek_out_battery
+    preferred_battery = @batteries.map do |b|
+      @a_star.find_path(@me.position, b)
+    end.sort_by(&:length).first
+
+    return nil unless preferred_battery
+
+    direction = Utils.infer_orientation(preferred_battery[0], preferred_battery[1], 1)
+    if @me.orientation == direction
+      'move'
+    elsif Utils.rotate_right(@me.orientation) == direction
+      'right'
+    elsif Utils.rotate_left(@me.orientation) == direction
+      'left'
+    else
+      'right'
     end
+  end
+
+  def move
+    action = avoid_laser
+    action ||= seek_out_battery
+
     action ||= 'noop'
     make_move(action)
   end
