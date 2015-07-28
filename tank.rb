@@ -344,7 +344,7 @@ class Game
   end
 
   def kill_opponent
-    return nil unless @state['energy'] > Laser.energy_required
+    return nil unless can_shoot?
     pos = @me.project_move
     return 'fire' if pos == @opponent.position
     distance = LASER::SPEED - 1
@@ -413,7 +413,12 @@ class Game
     head_towards_something(preferred_batteries.first)
   end
 
+  def can_shoot?
+    @state['energy'] > Laser.energy_required
+  end
+
   def head_towards_opponent
+    return nil unless can_shoot?
     path = @a_star.find_path(@me.vector, @opponent.position)
     head_towards_something(path)
   end
