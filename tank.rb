@@ -332,7 +332,7 @@ class Game
     length = 0
     i = 0
     orientation = @me.orientation
-    while (i < path.length)
+    while (i < path.length - 1)
       direction = Utils.infer_orientation(path[i], path[i + 1], 1)
       length += 1
       if orientation == direction
