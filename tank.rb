@@ -299,6 +299,17 @@ class Game
     action
   end
 
+  def kill_opponent
+    pos = @me.project_move
+    return 'fire' if pos == @opponent.position
+    (Laser::SPEED - 1).times do
+      break if spot(pos) == 'W'
+      pos = Utils.project_move(pos, @me.orientation, 1)
+      return 'fire' if pos == @opponent.position
+    end
+    nil
+  end
+
   def seek_out_battery
     preferred_battery = @batteries.map do |b|
       @a_star.find_path(@me.position, b)
@@ -320,6 +331,7 @@ class Game
 
   def move
     action = avoid_laser
+    action ||= kill_opponent
     action ||= seek_out_battery
 
     action ||= 'noop'
