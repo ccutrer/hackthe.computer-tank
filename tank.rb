@@ -313,14 +313,8 @@ class Game
     nil
   end
 
-  def seek_out_battery
-    preferred_battery = @batteries.map do |b|
-      @a_star.find_path(@me.position, b)
-    end.sort_by(&:length).first
-
-    return nil unless preferred_battery
-
-    direction = Utils.infer_orientation(preferred_battery[0], preferred_battery[1], 1)
+  def head_towards_something(path)
+    direction = Utils.infer_orientation(path[0], path[1], 1)
     if @me.orientation == direction
       'move'
     elsif Utils.rotate_right(@me.orientation) == direction
@@ -330,6 +324,21 @@ class Game
     else
       'right'
     end
+  end
+
+  def seek_out_battery
+    preferred_battery = @batteries.map do |b|
+      @a_star.find_path(@me.position, b)
+    end.sort_by(&:length).first
+
+    return nil unless preferred_battery
+
+    head_towards_something(preferred_battery)
+  end
+
+  def head_towards_opponent
+    path = @a_star.find_path(@me.position, @opponent.position)
+    head_towards_something(path)
   end
 
   def shoot_for_fun
@@ -345,6 +354,7 @@ class Game
     action = avoid_laser rescue nil
     action ||= kill_opponent rescue nil
     action ||= seek_out_battery rescue nil
+    action ||= head_towards_opponent rescue nil
     action ||= shoot_for_fun rescue nil
 
     action ||= 'noop'
