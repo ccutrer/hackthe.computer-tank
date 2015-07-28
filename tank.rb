@@ -190,8 +190,9 @@ class Game
   def parse_game(body)
     @state = JSON.parse(body)
     if @state['config']
-      Laser.ttl = @state['config']['laser_distance'].to_i
-      Laser.energy_required = @state['config']['laser_energy'].to_i
+      @config = @state['config']
+      Laser.ttl = @state['config']['laser_distance']
+      Laser.energy_required = @state['config']['laser_energy']
     end
 
     @board = @state['grid'].split("\n")
@@ -327,6 +328,14 @@ class Game
   end
 
   def seek_out_battery
+    # don't bother with batteries if it would overflow our energy
+    if @state['energy'] > @config['max_energy'] - @config['battery_power']
+      # unless we need the health
+      unless @state['health'] < @config['max_health'] - @config['battery_health']
+        return nil
+      end
+    end
+
     preferred_battery = @batteries.map do |b|
       @a_star.find_path(@me.position, b)
     end.sort_by(&:length).first
@@ -343,7 +352,7 @@ class Game
 
   def shoot_for_fun
     return nil if @last_fun_shot && @moves - @last_fun_shot < 5
-    if @state['energy'].to_i >= 2 * Laser.energy_required
+    if @state['energy'] >= 2 * Laser.energy_required
       @last_fun_shot = @moves
       return 'fire'
     end
