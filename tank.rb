@@ -96,7 +96,7 @@ class Laser
   attr_reader :orientation, :position
 
   class << self
-    attr_accessor :ttl
+    attr_accessor :ttl, :energy_required
   end
 
   SPEED = 2
@@ -190,6 +190,7 @@ class Game
     @state = JSON.parse(body)
     if @state['config']
       Laser.ttl = @state['config']['laser_distance'].to_i
+      Laser.energy_required = @state['config']['laser_energy'].to_i
     end
 
     @board = @state['grid'].split("\n")
@@ -329,10 +330,15 @@ class Game
     end
   end
 
+  def shoot_for_fun
+    return 'fire' if @state['energy'].to_i >= 2 * Laser.energy_required
+  end
+
   def move
-    action = avoid_laser
-    action ||= kill_opponent
-    action ||= seek_out_battery
+    action = avoid_laser rescue nil
+    action ||= kill_opponent rescue nil
+    action ||= seek_out_battery rescue nil
+    action ||= shoot_for_fun rescue nil
 
     action ||= 'noop'
     make_move(action)
