@@ -51,6 +51,10 @@ module Utils
         (orientation1 == 'W' && orientation2 == 'E')
     end
 
+    def parallel?(orientation1, orientation2)
+      orientation1 == orientation2 || oppose?(orientation1, orientation2)
+    end
+
     def rotate_right(orientation)
       case orientation
         when 'N'
@@ -343,10 +347,12 @@ class Game
     return nil unless @state['energy'] > Laser.energy_required
     pos = @me.project_move
     return 'fire' if pos == @opponent.position
-    (Laser::SPEED - 1).times do
-      break if spot(pos) == 'W'
-      pos = Utils.project_move(pos, @me.orientation, 1)
+    distance = LASER::SPEED - 1
+    distance += 1 if Utils.parallel?(@me.orientation, @opponent.inferred_orientation)
+    distance.times do
       return 'fire' if pos == @opponent.position
+      break unless spot(pos) == '_'
+      pos = Utils.project_move(pos, @me.orientation, 1)
     end
     nil
   end
