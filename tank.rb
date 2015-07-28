@@ -347,8 +347,8 @@ class Game
     return nil unless can_shoot?
     pos = @me.project_move
     return 'fire' if pos == @opponent.position
-    distance = Laser::SPEED - 1
-    distance += 1 if Utils.parallel?(@me.orientation, @opponent.inferred_orientation)
+    distance = Laser::SPEED
+    distance += Laser::SPEED if Utils.parallel?(@me.orientation, @opponent.inferred_orientation)
     distance.times do
       return 'fire' if pos == @opponent.position
       break unless spot(pos) == '_'
