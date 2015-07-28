@@ -11,13 +11,13 @@ module Utils
     attr_accessor :width, :height
 
     def infer_orientation(last_position, position, distance)
-      if wrap_x(last_position.first + distance) == position.first && last_position.last == position.last
+      if wrap_x(last_position[0] + distance) == position[0] && last_position[1] == position[1]
         'E'
-      elsif last_position.first == position.first && wrap_y(last_position.last + distance) == position.last
+      elsif last_position[0] == position[0] && wrap_y(last_position[1] + distance) == position[1]
         'S'
-      elsif wrap_x(last_position.first - distance) == position.first && last_position.last == position.last
+      elsif wrap_x(last_position[0] - distance) == position[0] && last_position[1] == position[1]
         'W'
-      elsif last_position.first == position.first && wrap_y(last_position.last - distance) == position.last
+      elsif last_position[0] == position[0] && wrap_y(last_position[1] - distance) == position[1]
         'N'
       else
         nil
@@ -42,6 +42,13 @@ module Utils
           (orientation2 == 'E' || orientation2 == 'W')) ||
         ((orientation1 == 'E' || orientation1 == 'W') &&
             (orientation2 == 'N' || orientation2 == 'S'))
+    end
+
+    def oppose?(orientation1, orientation2)
+        (orientation1 == 'N' && orientation2 == 'S') ||
+          (orientation1 == 'S' && orientation2 == 'N') ||
+          (orientation1 == 'E' && orientation2 == 'W') ||
+          (orientation1 == 'W' && orientation2 == 'E')
     end
 
     def rotate_right(orientation)
@@ -70,6 +77,18 @@ module Utils
       end
     end
 
+    def turn_around(orientation)
+      case orientation
+      when 'N'
+        'S'
+      when 'E'
+        'W'
+      when 'S'
+        'N'
+      when 'W'
+        'E'
+      end
+    end
     def wrap_x(x)
       if x < 0
         width + x
@@ -147,12 +166,16 @@ class Tank
     direction = with_rotation ? Utils.send("rotate_#{with_rotation}", orientation) : orientation
     Utils.project_move(position, direction, SPEED)
   end
+
+  def vector
+    position + [Utils.turn_around(orientation || inferred_orientation || 'N')]
+  end
 end
 
 class Game
   attr_reader :state
 
-  def initialize(host, id, me)
+  def initialize(host, id)
     @host, @id = URI.parse(host), id
     @http = Net::HTTP.new(@host.host, @host.port)
     @lasers = []
@@ -160,23 +183,35 @@ class Game
     @opponent = Tank.new
     @me = Tank.new
     @moves = 0
-    adjacency = ->(location) do
+    adjacency = ->(pos, goal) do
       [
-          [Utils.wrap_x(location.first - 1), location.last],
-          [location.first, Utils.wrap_y(location.last - 1)],
-          [Utils.wrap_x(location.first + 1), location.last],
-          [location.first, Utils.wrap_y(location.last + 1)]
-      ].select do |new_location|
-        spot(new_location) != 'W'
+          [Utils.wrap_x(pos[0] + 1), pos[1], 'W'],
+          [pos[0], Utils.wrap_y(pos[1] + 1), 'N'],
+          [Utils.wrap_x(pos[0] - 1), pos[1], 'E'],
+          [pos[0], Utils.wrap_y(pos[1] - 1), 'S']
+      ].select do |new_pos|
+        new_pos[0..1] == goal || %w{_ B L}.include?(spot(new_pos[0..1]))
       end
     end
 
-    cost_func = ->(a, b) { 1 }
-    distance_func = ->(location, finish) do
-      (finish.last - location.last).abs + (finish.first - location.first).abs
+    cost_func = ->(a, b) do
+      if a.last == b.last
+        1
+      elsif Utils.oppose?(a.last, b.last)
+        3
+      else
+        2
+      end
     end
-    @a_star = AStar.new(adjacency, cost_func, distance_func)
-    join(me)
+
+    distance_func = ->(location, finish) do
+      (finish[0] - location[0]).abs + (finish[1] - location[1]).abs
+    end
+
+    equality_func = ->(a, b) do
+      a[0..1] == b[0..1]
+    end
+    @a_star = AStar.new(adjacency, cost_func, distance_func, equality_func)
   end
 
   def join(me)
@@ -184,11 +219,11 @@ class Game
     req['X-Sm-Playermoniker'] = me
     res = @http.request(req)
     @player_id = res['X-Sm-Playerid']
-    parse_game(res.body)
+    parse_game(JSON.parse(res.body))
   end
 
-  def parse_game(body)
-    @state = JSON.parse(body)
+  def parse_game(state)
+    @state = state
     if @state['config']
       @config = @state['config']
       Laser.ttl = @state['config']['laser_distance']
@@ -243,7 +278,7 @@ class Game
     req['X-Sm-Playerid'] = @player_id
     res = @http.request(req)
     @moves += 1
-    parse_game(res.body)
+    parse_game(JSON.parse(res.body))
   end
 
   def spot(pos)
@@ -358,11 +393,11 @@ class Game
     end
 
     preferred_batteries = @batteries.map do |b|
-      @a_star.find_path(@me.position, b)
+      @a_star.find_path(@me.vector, b)
     end.sort_by(&:length)
 
     if preferred_batteries.length > 1 &&
-        @a_star.find_path(@opponent.position, preferred_batteries.first.last).length < preferred_batteries.first.length
+        @a_star.find_path(@opponent.vector, preferred_batteries.first.last).length < preferred_batteries.first.length
       preferred_batteries.shift
     end
     return nil unless preferred_batteries.first
@@ -371,7 +406,7 @@ class Game
   end
 
   def head_towards_opponent
-    path = @a_star.find_path(@me.position, @opponent.position)
+    path = @a_star.find_path(@me.vector, @opponent.position)
     head_towards_something(path)
   end
 
@@ -396,7 +431,10 @@ class Game
   end
 end
 
-game = Game.new(ARGV[0], ARGV[1], ARGV[2])
+game = Game.new(ARGV[0], ARGV[1])
+
+game.join(ARGV[2])
+
 while game.running?
   game.move
 end

@@ -2,10 +2,11 @@ require 'set'
 require_relative 'priority_queue'
 
 class AStar
-  def initialize(neighbor_nodes, dist_between, heuristic_cost_estimate)
+  def initialize(neighbor_nodes, dist_between, heuristic_cost_estimate, equality = nil)
     @neighbor_nodes = neighbor_nodes
     @dist_between = dist_between
     @heuristic_cost_estimate = heuristic_cost_estimate
+    @equality = equality || :==.to_proc
   end
 
   def find_path(start, goal)
@@ -19,14 +20,15 @@ class AStar
     while !openset.empty?
       current = openset.pop
 
-      if (current == goal)
-        return reconstruct_path(came_from, goal)
+      if (@equality.call(current, goal))
+        return reconstruct_path(came_from, current)
       end
 
       closedset << current
-      @neighbor_nodes.call(current).each do |neighbor|
+      neighbors = @neighbor_nodes.call(current, goal)
+      neighbors.each do |neighbor|
         next if closedset.include?(neighbor)
-        tentative_g_score = g_score[current] + 1
+        tentative_g_score = g_score[current] + @dist_between.call(current, neighbor)
 
         if tentative_g_score < g_score[neighbor]
           came_from[neighbor] = current
