@@ -302,6 +302,7 @@ class Game
   end
 
   def kill_opponent
+    return nil unless @state['energy'] > Laser.energy_required
     pos = @me.project_move
     return 'fire' if pos == @opponent.position
     (Laser::SPEED - 1).times do
@@ -332,7 +333,12 @@ class Game
   end
 
   def shoot_for_fun
-    return 'fire' if @state['energy'].to_i >= 2 * Laser.energy_required
+    return nil if @last_fun_shot && @moves - @last_fun_shot < 5
+    if @state['energy'].to_i >= 2 * Laser.energy_required
+      @last_fun_shot = @moves
+      return 'fire'
+    end
+    nil
   end
 
   def move
