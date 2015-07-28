@@ -347,7 +347,7 @@ class Game
     return nil unless can_shoot?
     pos = @me.project_move
     return 'fire' if pos == @opponent.position
-    distance = LASER::SPEED - 1
+    distance = Laser::SPEED - 1
     distance += 1 if Utils.parallel?(@me.orientation, @opponent.inferred_orientation)
     distance.times do
       return 'fire' if pos == @opponent.position
@@ -386,6 +386,8 @@ class Game
   end
 
   def seek_out_battery
+    return nil if @batteries.empty?
+
     # don't bother with batteries if it would overflow our energy
     if @state['energy'] > @config['max_energy'] - @config['battery_power']
       # unless we need the health
@@ -395,16 +397,18 @@ class Game
     end
 
     preferred_batteries = @batteries.map do |b|
-      convert_path_to_directions(@a_star.find_path(@me.vector, b))
-    end.sort_by(&:length)
+      [b, convert_path_to_directions(@a_star.find_path(@me.vector, b))]
+    end.sort_by do |(b, directions)|
+      directions.length
+    end
 
     # don't go for a battery the opponent is closer to
-    if convert_path_to_directions(@a_star.find_path(@opponent.vector, preferred_batteries.first.last)).length < preferred_batteries.first.length
+    if convert_path_to_directions(@a_star.find_path(@opponent.vector, preferred_batteries.first.first)).length < preferred_batteries.first.last.length
       preferred_batteries.shift
     end
-    return nil unless preferred_batteries.first
+    return nil if preferred_batteries.empty?
 
-    head_towards_something(preferred_batteries.first)
+    head_towards_something(preferred_batteries.first.last)
   end
 
   def can_shoot?
@@ -413,7 +417,7 @@ class Game
 
   def head_towards_opponent
     return nil unless can_shoot?
-    path = @a_star.find_path(@me.vector, @opponent.position)
+    path = convert_path_to_directions(@a_star.find_path(@me.vector, @opponent.position))
     head_towards_something(path)
   end
 
@@ -426,12 +430,19 @@ class Game
     nil
   end
 
+  def protect
+    begin
+      yield
+    rescue
+      nil
+    end
+  end
   def move
-    action = avoid_laser rescue nil
-    action ||= kill_opponent rescue nil
-    action ||= seek_out_battery rescue nil
-    action ||= head_towards_opponent rescue nil
-    action ||= shoot_for_fun rescue nil
+    action = protect { avoid_laser }
+    action ||= protect { kill_opponent }
+    action ||= protect { seek_out_battery }
+    action ||= protect { head_towards_opponent }
+    action ||= protect { shoot_for_fun }
 
     action ||= 'noop'
     make_move(action)
