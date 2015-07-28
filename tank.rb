@@ -385,6 +385,14 @@ class Game
     directions
   end
 
+  def sort_batteries
+    @preferred_batteries = @batteries.map do |b|
+      [b, convert_path_to_directions(@a_star.find_path(@me.vector, b))]
+    end.sort_by do |(b, directions)|
+      directions.length
+    end
+  end
+
   def seek_out_battery
     return nil if @batteries.empty?
 
@@ -396,23 +404,17 @@ class Game
       end
     end
 
-    preferred_batteries = @batteries.map do |b|
-      [b, convert_path_to_directions(@a_star.find_path(@me.vector, b))]
-    end.sort_by do |(b, directions)|
-      directions.length
-    end
-
     # don't go for a battery the opponent is closer to
-    if convert_path_to_directions(@a_star.find_path(@opponent.vector, preferred_batteries.first.first)).length < preferred_batteries.first.last.length
-      preferred_batteries.shift
+    if convert_path_to_directions(@a_star.find_path(@opponent.vector, @preferred_batteries.first.first)).length < @preferred_batteries.first.last.length
+      @preferred_batteries.shift
     end
-    return nil if preferred_batteries.empty?
+    return nil if @preferred_batteries.empty?
 
-    head_towards_something(preferred_batteries.first.last)
+    head_towards_something(@preferred_batteries.first.last)
   end
 
   def can_shoot?
-    @state['energy'] > Laser.energy_required
+    @state['energy'] >= Laser.energy_required
   end
 
   def head_towards_opponent
@@ -430,6 +432,18 @@ class Game
     nil
   end
 
+  def go_away_from(spot)
+    target = [Utils.wrap_x(spot[0] + Utils.width / 2), Utils.wrap_y(spot[1] + Utils.height / 2)]
+    path = convert_path_to_directions(@a_star.find_path(@me.vector, target))
+    path.first if path
+  end
+
+  def avoid_opponent
+    avoid = @preferred_batteries.first.first unless @preferred_batteries.empty?
+    avoid ||= @opponent.position
+    go_away_from(avoid)
+  end
+
   def protect
     begin
       yield
@@ -437,11 +451,15 @@ class Game
       nil
     end
   end
+
   def move
+    sort_batteries
     action = protect { avoid_laser }
     action ||= protect { kill_opponent }
     action ||= protect { seek_out_battery }
     action ||= protect { head_towards_opponent }
+    # we're not going towards our opponent, maybe we should avoid him (or the battery he's probably going to that we can't beat him to)
+    action ||= avoid_opponent
     action ||= protect { shoot_for_fun }
 
     action ||= 'noop'
