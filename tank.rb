@@ -121,6 +121,7 @@ class Laser
 
   def project_moves(count)
     moves = []
+    return unless orientation
     count.times do
       SPEED.times do
         moves << Utils.project_move(moves.last || @position, orientation, 1)
