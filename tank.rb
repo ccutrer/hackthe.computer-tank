@@ -315,6 +315,7 @@ class Game
   end
 
   def head_towards_something(path)
+    return nil if path_length(path) * @config['health_loss'] > @state['health']
     direction = Utils.infer_orientation(path[0], path[1], 1)
     if @me.orientation == direction
       'move'
@@ -325,6 +326,26 @@ class Game
     else
       'right'
     end
+  end
+
+  def path_length(path)
+    length = 0
+    i = 0
+    orientation = @me.orientation
+    while (i < path.length)
+      direction = Utils.infer_orientation(path[i], path[i + 1], 1)
+      length += 1
+      if orientation == direction
+        i += 1
+      elsif Utils.rotate_right(orientation) == direction
+        orientation = Utils.rotate_right(orientation)
+      elsif Utils.rotate_left(orientation) == direction
+        orientation = Utils.rotate_left(orientation)
+      else
+        orientation = Utils.rotate_right(orientation)
+      end
+    end
+    length
   end
 
   def seek_out_battery
