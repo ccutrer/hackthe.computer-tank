@@ -42,7 +42,33 @@ module Utils
         ((orientation1 == 'E' || orientation1 == 'W') &&
             (orientation2 == 'N' || orientation2 == 'S'))
     end
-  
+
+    def rotate_right(orientation)
+      case orientation
+        when 'N'
+          'E'
+        when 'E'
+          'S'
+        when 'S'
+          'W'
+        when 'W'
+          'N'
+      end
+    end
+
+    def rotate_left(orientation)
+      case orientation
+        when 'N'
+          'W'
+        when 'W'
+          'S'
+        when 'S'
+          'E'
+        when 'E'
+          'N'
+      end
+    end
+
     def wrap_x(x)
       if x < 0
         width + x
@@ -113,6 +139,11 @@ class Tank
     @orientation = Utils.infer_orientation(@position, position, SPEED) if @position
     @inferred_orientation = @orientation || @inferred_orientation
     @position = position
+  end
+
+  def project_move(with_rotation = nil)
+    direction = with_rotation ? Utils.send("rotate_#{with_rotation}", orientation) : orientation
+    Utils.project_move(position, direction, SPEED)
   end
 end
 
@@ -195,20 +226,53 @@ class Game
     parse_game(res.body)
   end
 
+  def spot(pos)
+    @board[pos.last][pos.first]
+  end
+
   def move
     action = nil
     @lasers.each do |l|
        perpendicular = Utils.perpendicular?(@me.orientation, l.orientation)
-       count = perpendicular ? 1 : 2
+       if perpendicular
+         best_direction = 'move'
+         count = 1
+         if spot(@me.project_move) == 'W'
+           best_direction = 'right'
+           count += 1
+           if spot(@me.project_move('right') == 'W')
+             best_direction = 'left'
+             # I'm in a corner; gotta reverse out
+             if spot(@me.project_move('left') == 'W')
+               count += 1
+             end
+           end
+         end
+       else
+         best_direction = 'right'
+         count = 2
+         if spot(@me.project_move('right')) == 'W'
+           best_direction = 'left'
+           if spot(@me.project_move('left')) == 'W'
+             count += 1
+             best_direction = 'move'
+             if spot(@me.project_move) == 'W'
+               count += 2
+               best_direction = 'right'
+             end
+           end
+         end
+       end
+
        moves = l.project_moves(count)
        moves.each do |pos|
          # it will hit a wall, don't worry about it
-         break if @board[pos.last][pos.first] == 'W'
+         break if spot(pos) == 'W'
          if pos == @me.position
            if perpendicular
              action = 'move'
            else
-             action = 'right'
+             action = best_direction
            end
            break
          end
