@@ -1,0 +1,157 @@
+<html lang="en"><head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Future Tank - hackthe.computer</title>
+    <link rel="stylesheet" href="https://hackthe.computer/static/css/bootstrap.css?1">
+    <link rel="stylesheet" href="https://hackthe.computer/static/css/bootstrap-theme.css?1">
+    <!--[if lt IE 9]>
+      <script src="//oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js">
+        </script>
+      <script src="//oss.maxcdn.com/respond/1.4.2/respond.min.js">
+        </script>
+    <![endif]-->
+    <link rel="stylesheet" href="https://hackthe.computer/static/css/site.css?1">
+  </head>
+  <body style="visibility: visible;">
+    <div class="container main"><h1>Future Tank</h1>
+
+<h2>Game</h2>
+
+<p>Outlive the other tank! Employ futuristic weaponry to defeat your enemy!</p>
+
+<p>Your tank lives on a grid of cells. Tanks can be oriented north, south, east,
+or west. Tanks can move forward, turn 90 degrees left or right, and fire.</p>
+
+<p>Tanks start off with a certain amount of health and energy. As the game
+progresses, tanks lose health naturally, and health cannot be replenished.
+If a tank gets shot, it loses a large amount of health. Tank energy is used
+during weapon fire, but can be replenished by driving to cells that contain
+batteries. Batteries are dropped at random times and locations throughout the
+course of a game.</p>
+
+<p>The game proceeds in ticks. Every two game ticks, tanks are asked to make a
+decision about what to do next. The tank’s next action is performed in the
+next game tick. The other game tick is used for making lasers move faster
+than tanks can move.</p>
+
+<p>If your tank outlives the other tank, you win!</p>
+
+<h2>API</h2>
+
+<h3>Starting the game</h3>
+
+<p>Since multiple games can run at the same time on the same game server, you must
+agree with your opponent on a game id. Let’s assume your game id is <code>tankyou</code>.</p>
+
+<p>To join the <code>tankyou</code> game, you must do a <code>POST</code> to
+<code>http://gameserver:8080/game/tankyou/join</code>, with header
+<code>X-Sm-Playermoniker: yourname</code>. If your game is being televised, your player
+moniker will show up on the scoreboard. With <code>curl</code>, this looks like:</p>
+
+<pre><code>curl -X POST -H 'X-Sm-Playermoniker: yourname' http://gameserver:8080/game/tankyou
+</code></pre>
+
+<p>This request will not return until the game has started and its your turn to
+move.</p>
+
+<p>The response will include the <code>X-Sm-Playerid</code> header, which you will need to
+save and include in all future action requests.</p>
+
+<p>The response will include a JSON object (the one described below) with an
+additional field called <code>config</code>. <code>config</code> itself has the following fields:</p>
+
+<pre><code>  * `turn_timeout` - how long you have each turn to take your turn, in
+   nanoseconds. If you take longer than this time, then you default to a
+   noop action.
+  * `connect_back_timeout` - a timeout value in seconds in which you have to respond
+   before we assume you are no longer player and you self destruct.
+  * `max_health` - how much health you start with
+  * `max_energy` - how much energy you start with
+  * `health_loss` - how much health you automatically lose each turn
+  * `laser_damage` - how much health is subtracted when hit by a laser
+  * `laser_distance` - how many cells a laser travels before fizzing out
+  * `laser_energy` - how much energy it takes to fire a laser
+  * `battery_power` - how much energy is restored by picking up a battery, up
+   to the `maximum_energy` limit
+  * `battery_health` - how much health is restored by picking up a battery, up
+   to the `maximum_health` limit
+</code></pre>
+
+<h3>Turns</h3>
+
+<p>Your turn begins when your previous <code>POST</code> request returns the current game
+state to you. Game state will be a JSON object like the following example:</p>
+
+<pre><code>{
+    "status": "running",
+    "health": 200,
+    "energy": 10,
+    "orientation": "north",
+    "grid": &lt;grid&gt;
+}
+</code></pre>
+
+<ul>
+<li><code>status</code> - can either be <code>running</code>, <code>won</code>, <code>lost</code>, or <code>draw</code>. When the
+status is not <code>running</code>, you are not expected to make future requests. The
+game is over.</li>
+<li><code>health</code> - An integer, starts off at the max health possible and decreases
+over time, possibly rapidly if you’re getting shot.</li>
+<li><code>energy</code> - An integer, does not necessarily start of at the max energy
+possible. Decreases whenever you fire your weapon. You cannot fire if you
+don’t have enough energy.</li>
+<li><code>orientation</code> - The direction you are currently facing on the baord.</li>
+<li><code>grid</code> - A string, detailing the current state of the board.</li>
+</ul>
+
+<p>The grid will be a string containing something like the following contents:</p>
+
+<pre><code>________________________
+___W_____WWWWWWWW_______
+___W_W__________________
+___W_W_______B__________
+___W_W__________________
+___W_W__________________
+_WWWWWWWWW___L____O_____
+_____W__________________
+_____W_WWWWW____________
+_________WWWWWWWW_______
+________________________
+___________WWWW_________
+__X_____________________
+________________________
+____WWW_________________
+________________________
+</code></pre>
+
+<p>Empty cells are <code>_</code>, walls are <code>W</code>, your tank is <code>X</code>, the other tank is <code>O</code>,
+batteries are <code>B</code>, and lasers are <code>L</code>.</p>
+
+<p>Once you have computed your next action, you must make an HTTP request with
+that action. Your action can be <code>move</code>, <code>left</code>, <code>right</code>, <code>fire</code>, or <code>noop</code>, and
+you should make a <code>POST</code> request to
+<code>http://gameserver:8080/game/tankyou/action</code>, except replacing <code>tankyou</code> and
+<code>action</code> with appropriate values. You should send the <code>X-Sm-Playerid</code> header
+with each action request.</p>
+
+<h2>Other notes</h2>
+
+<ul>
+<li>You have a fixed amount of time to make your move. If you take longer than
+the turn timeout, you miss your turn.</li>
+<li>If you take longer than the connect-back timeout, you forfeit the game.</li>
+<li>The board wraps around in both directions, like Pac-Man. Laser fire also
+wraps.</li>
+<li>You can shoot batteries.</li>
+<li>Colliding lasers nullify each other.</li>
+</ul>
+    </div>
+
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js">
+      </script>
+    <script src="https://hackthe.computer/static/js/bootstrap.js?1"></script>
+    <script src="https://hackthe.computer/static/js/site.js?1"></script>
+  
+</body></html>
+
