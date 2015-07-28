@@ -357,13 +357,17 @@ class Game
       end
     end
 
-    preferred_battery = @batteries.map do |b|
+    preferred_batteries = @batteries.map do |b|
       @a_star.find_path(@me.position, b)
-    end.sort_by(&:length).first
+    end.sort_by(&:length)
 
-    return nil unless preferred_battery
+    if preferred_batteries.length > 1 &&
+        @a_star.find_path(@opponent.position, preferred_batteries.first.last).length < preferred_batteries.first.length
+      preferred_batteries.shift
+    end
+    return nil unless preferred_batteries.first
 
-    head_towards_something(preferred_battery)
+    head_towards_something(preferred_batteries.first)
   end
 
   def head_towards_opponent
