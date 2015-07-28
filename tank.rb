@@ -45,10 +45,10 @@ module Utils
     end
 
     def oppose?(orientation1, orientation2)
-        (orientation1 == 'N' && orientation2 == 'S') ||
-          (orientation1 == 'S' && orientation2 == 'N') ||
-          (orientation1 == 'E' && orientation2 == 'W') ||
-          (orientation1 == 'W' && orientation2 == 'E')
+      (orientation1 == 'N' && orientation2 == 'S') ||
+        (orientation1 == 'S' && orientation2 == 'N') ||
+        (orientation1 == 'E' && orientation2 == 'W') ||
+        (orientation1 == 'W' && orientation2 == 'E')
     end
 
     def rotate_right(orientation)
@@ -324,7 +324,9 @@ class Game
         # it will hit a wall, don't worry about it
         break if spot(pos) == 'W'
         if pos == @me.position
-          if perpendicular
+          if l.orientation && Utils.oppose?(@me.orientation, l.orientation) && @state['energy'] > @config['laser_energy']
+            action = 'fire'
+          elsif perpendicular
             action = 'move'
           else
             action = best_direction
